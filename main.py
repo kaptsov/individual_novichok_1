@@ -27,28 +27,41 @@ def get_flight_data(trip):
     }
 
 
+def get_price(flight):
+
+    return float(flight.find('pricing').find(chargetype='TotalAmount').text)
+
+
 def get_flights(soup):
 
     flight_collection = list()
     for index_request, request in enumerate(soup.find_all('flights')):
 
         onward_trip = request.find('onwardpriceditinerary')
+        backward_trip = request.find('returnpriceditinerary')
 
         if onward_trip:
-            flight = onward_trip.find_all('flight')
-
-            data = [get_flight_data(onward) for onward in flight]
-            source = data[0]['Source']
-            dest = data[-1]['Destination']
-            total_time = data[-1]['ArrivalTimeStr'] - data[0]['DepartureTimeStr']
+            onward_flight = onward_trip.find_all('flight')
+            onward_data = [get_flight_data(onward) for onward in onward_flight]
+            backward_data = [get_flight_data(backward) for backward in backward_data] if backward_trip else list()
+            source = onward_data[0]['Source']
+            dest = onward_data[-1]['Destination']
+            onward_time = onward_data[-1]['ArrivalTimeStr'] - onward_data[0]['DepartureTimeStr']
+            backward_time = (backward_data[-1]['ArrivalTimeStamp'] - backward_data[0]['DepartureTimeStamp']) if backward_data else datetime.timedelta(0)
             flight_collection.append({
-                'onward': data,
+                'onward': onward_data,
+                'backward': backward_data,
                 'source': source,
                 'dest': dest,
-                'total_time': total_time.total_seconds(),
+                'price': get_price(request),
+                'onward_time': onward_time.total_seconds(),
+                'backward_time': backward_time.total_seconds(),
+                'total_time': onward_time.total_seconds() + backward_time.total_seconds(),
+
             })
 
     return flight_collection
+
 
 def get_best(flights):
 
@@ -56,9 +69,14 @@ def get_best(flights):
         return dict()
 
     sorted_by_time = sorted(flights, key = lambda item: item['total_time'])
+    sorted_by_price = sorted(flights, key=lambda item: item['price'])
+
     data = {
-        'fast': sorted_by_time[0],
-        'slow': sorted_by_time[-1]
+        'fastest': sorted_by_time[0],
+        'slowest': sorted_by_time[-1],
+        'cheapest': sorted_by_price[0],
+        'expensievest': sorted_by_price[-1],
+        'the_best': sorted(flights, key = lambda item: item['total_time']/sorted_by_time[0]['total_time'] * item['price'])[0],
     }
     return data
 
@@ -69,7 +87,16 @@ if __name__ == '__main__':
         xml_file = fd.read()
 
     soup = BeautifulSoup(xml_file, 'lxml')
-    print(get_best(get_flights(soup)))
+
+    print(f"Самый быстрый {get_best(get_flights(soup))['fastest']}")
+    print(' ')
+    print(f"Самый медленный {get_best(get_flights(soup))['slowest']}")
+    print(' ')
+    print(f"Самый дешевый {get_best(get_flights(soup))['cheapest']}")
+    print(' ')
+    print(f"Самый дорогой {get_best(get_flights(soup))['expensievest']}")
+    print(' ')
+    print(f"Лучший вариант {get_best(get_flights(soup))['the_best']}")
 
 
 
