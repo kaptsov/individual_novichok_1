@@ -1,5 +1,13 @@
 from bs4 import BeautifulSoup
 import datetime
+import argparse
+
+
+def create_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('filename', nargs='+')
+    parser.add_argument('request', nargs='+')
+    return parser
 
 
 def parse_date(timestamp):
@@ -28,26 +36,34 @@ def get_flight_data(trip):
 
 
 def get_price(flight):
-
     return float(flight.find('pricing').find(chargetype='TotalAmount').text)
 
 
-def get_flights(soup):
+def get_flights(soup_data):
 
     flight_collection = list()
-    for index_request, request in enumerate(soup.find_all('flights')):
+    for index_request, request in enumerate(soup_data.find_all('flights')):
 
         onward_trip = request.find('onwardpriceditinerary')
         backward_trip = request.find('returnpriceditinerary')
 
         if onward_trip:
             onward_flight = onward_trip.find_all('flight')
-            onward_data = [get_flight_data(onward) for onward in onward_flight]
-            backward_data = [get_flight_data(backward) for backward in backward_data] if backward_trip else list()
+            onward_data = [
+                get_flight_data(onward) for onward in onward_flight
+                ]
+            backward_data = [
+                get_flight_data(backward) for backward in backward_data
+                ] if backward_trip else list()
             source = onward_data[0]['Source']
             dest = onward_data[-1]['Destination']
-            onward_time = onward_data[-1]['ArrivalTimeStr'] - onward_data[0]['DepartureTimeStr']
-            backward_time = (backward_data[-1]['ArrivalTimeStamp'] - backward_data[0]['DepartureTimeStamp']) if backward_data else datetime.timedelta(0)
+            onward_time = onward_data[-1][
+                'ArrivalTimeStr'
+                ] - onward_data[0]['DepartureTimeStr']
+            backward_time = (
+                backward_data[-1]['ArrivalTimeStamp'] -
+                backward_data[0]['DepartureTimeStamp']
+                ) if backward_data else datetime.timedelta(0)
             flight_collection.append({
                 'onward': onward_data,
                 'backward': backward_data,
@@ -56,8 +72,9 @@ def get_flights(soup):
                 'price': get_price(request),
                 'onward_time': onward_time.total_seconds(),
                 'backward_time': backward_time.total_seconds(),
-                'total_time': onward_time.total_seconds() + backward_time.total_seconds(),
-
+                'total_time':
+                    onward_time.total_seconds() +
+                    backward_time.total_seconds(),
             })
 
     return flight_collection
@@ -68,7 +85,7 @@ def get_best(flights):
     if not flights:
         return dict()
 
-    sorted_by_time = sorted(flights, key = lambda item: item['total_time'])
+    sorted_by_time = sorted(flights, key=lambda item: item['total_time'])
     sorted_by_price = sorted(flights, key=lambda item: item['price'])
 
     data = {
@@ -76,33 +93,21 @@ def get_best(flights):
         'slowest': sorted_by_time[-1],
         'cheapest': sorted_by_price[0],
         'expensievest': sorted_by_price[-1],
-        'the_best': sorted(flights, key = lambda item: item['total_time']/sorted_by_time[0]['total_time'] * item['price'])[0],
+        'the_best': sorted(
+            flights, key=lambda item: item['total_time'] /
+            sorted_by_time[0]['total_time'] * item['price']
+            )[0],
     }
     return data
 
 
 if __name__ == '__main__':
 
-    with open('RS_ViaOW.xml', 'r') as fd:
+    parser = create_parser()
+    namespace = parser.parse_args()
+
+    with open(str(namespace.filename[0]), 'r') as fd:
         xml_file = fd.read()
-
     soup = BeautifulSoup(xml_file, 'lxml')
-
-    print(f"Самый быстрый {get_best(get_flights(soup))['fastest']}")
-    print(' ')
-    print(f"Самый медленный {get_best(get_flights(soup))['slowest']}")
-    print(' ')
-    print(f"Самый дешевый {get_best(get_flights(soup))['cheapest']}")
-    print(' ')
-    print(f"Самый дорогой {get_best(get_flights(soup))['expensievest']}")
-    print(' ')
-    print(f"Лучший вариант {get_best(get_flights(soup))['the_best']}")
-
-
-
-
-
-
-
-
-
+    print(f'The {namespace.request[0]} flight option is:')
+    print(get_best(get_flights(soup))[namespace.request[0]])
