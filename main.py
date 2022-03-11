@@ -39,45 +39,42 @@ def get_price(flight):
     return float(flight.find('pricing').find(chargetype='TotalAmount').text)
 
 
-def get_flights(soup_data):
+def get_flights(request):
 
-    flight_collection = list()
-    for index_request, request in enumerate(soup_data.find_all('flights')):
+    onward_trip = request.find('onwardpriceditinerary')
+    backward_trip = request.find('returnpriceditinerary')
 
-        onward_trip = request.find('onwardpriceditinerary')
-        backward_trip = request.find('returnpriceditinerary')
+    if not onward_trip:
+        return
 
-        if onward_trip:
-            onward_flight = onward_trip.find_all('flight')
-            onward_data = [
-                get_flight_data(onward) for onward in onward_flight
-                ]
-            backward_data = [
-                get_flight_data(backward) for backward in backward_data
-                ] if backward_trip else list()
-            source = onward_data[0]['Source']
-            dest = onward_data[-1]['Destination']
-            onward_time = onward_data[-1][
-                'ArrivalTimeStr'
-                ] - onward_data[0]['DepartureTimeStr']
-            backward_time = (
-                backward_data[-1]['ArrivalTimeStamp'] -
-                backward_data[0]['DepartureTimeStamp']
-                ) if backward_data else datetime.timedelta(0)
-            flight_collection.append({
-                'onward': onward_data,
-                'backward': backward_data,
-                'source': source,
-                'dest': dest,
-                'price': get_price(request),
-                'onward_time': onward_time.total_seconds(),
-                'backward_time': backward_time.total_seconds(),
-                'total_time':
-                    onward_time.total_seconds() +
-                    backward_time.total_seconds(),
-            })
-
-    return flight_collection
+    onward_flight = onward_trip.find_all('flight')
+    onward_data = [
+        get_flight_data(onward) for onward in onward_flight
+        ]
+    backward_data = [
+        get_flight_data(backward) for backward in backward_trip
+        ] if backward_trip else list()
+    source = onward_data[0]['Source']
+    dest = onward_data[-1]['Destination']
+    onward_time = onward_data[-1][
+        'ArrivalTimeStr'
+        ] - onward_data[0]['DepartureTimeStr']
+    backward_time = (
+        backward_data[-1]['ArrivalTimeStamp'] -
+        backward_data[0]['DepartureTimeStamp']
+        ) if backward_data else datetime.timedelta(0)
+    return {
+        'onward': onward_data,
+        'backward': backward_data,
+        'source': source,
+        'dest': dest,
+        'price': get_price(request),
+        'onward_time': onward_time.total_seconds(),
+        'backward_time': backward_time.total_seconds(),
+        'total_time':
+            onward_time.total_seconds() +
+            backward_time.total_seconds(),
+    }
 
 
 def get_best(flights):
@@ -88,7 +85,7 @@ def get_best(flights):
     sorted_by_time = sorted(flights, key=lambda item: item['total_time'])
     sorted_by_price = sorted(flights, key=lambda item: item['price'])
 
-    data = {
+    return {
         'fastest': sorted_by_time[0],
         'slowest': sorted_by_time[-1],
         'cheapest': sorted_by_price[0],
@@ -98,7 +95,6 @@ def get_best(flights):
             sorted_by_time[0]['total_time'] * item['price']
             )[0],
     }
-    return data
 
 
 if __name__ == '__main__':
@@ -109,5 +105,12 @@ if __name__ == '__main__':
     with open(str(namespace.filename[0]), 'r') as fd:
         xml_file = fd.read()
     soup = BeautifulSoup(xml_file, 'lxml')
+
+    flight_collection = list()
+    for request in soup.find_all('flights'):
+        if not get_flights(request):
+            continue
+        flight_collection.append(get_flights(request))
+
     print(f'The {namespace.request[0]} flight option is:')
-    print(get_best(get_flights(soup))[namespace.request[0]])
+    print(get_best(flight_collection)[namespace.request[0]])
